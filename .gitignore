@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+
+# Build output
+frontend/build/
+
+# Cache + temporary files
+frontend/.cache/
+*.pack
+
+# Lidar data
+*.laz
+*.bin
+
+# Environment
+.env
+.env.*
+
+# OS junk
+.DS_Store
+Thumbs.db

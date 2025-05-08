@@ -1,15 +1,32 @@
+//api-server/server.js
+const dotenv = require("dotenv");
+dotenv.config(); // <<< FIRST!
+
 const express = require("express");
-const multer = require("multer");
 const cors = require("cors");
+const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
 const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
-require("dotenv").config();
+
+// NEW: Import tilingRoutes
+const tilingRoutes = require("./routes/tilingRoutes");
+const cesiumRoutes = require('./routes/cesiumRoutes');
+
+// Load environment variables
+dotenv.config();
+console.log('Environment variables loaded:', {
+    SUPABASE_URL: process.env.SUPABASE_URL ? 'Set' : 'Not Set',
+    R2_ACCOUNT_ID: process.env.R2_ACCOUNT_ID ? 'Set' : 'Not Set',
+    CESIUM_ION_ACCESS_TOKEN: process.env.CESIUM_ION_ACCESS_TOKEN ? 'Set' : 'Not Set'
+});
 
 const app = express();
-const port = 8080;
+const port = process.env.PORT || 3001;
 
 app.use(cors()); // Allow frontend to connect (CORS)
+app.use(express.json()); // Needed to read JSON bodies!
+app.use(express.urlencoded({ extended: true }));
 
 const upload = multer({ dest: "uploads/" });
 
@@ -49,6 +66,19 @@ app.post("/upload", upload.single("file"), async (req, res) => {
     console.error("❌ Upload failed:", err);
     res.status(500).send("Upload to R2 failed");
   }
+});
+
+// NEW: Tiling API routes
+app.use("/tiling", tilingRoutes);
+app.use('/api/cesium', cesiumRoutes);
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+    console.error(err.stack);
+    res.status(500).json({ 
+        error: 'Something went wrong!',
+        details: err.message 
+    });
 });
 
 app.listen(port, () => {

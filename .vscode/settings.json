@@ -1,0 +1,9 @@
+{
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "files.associations": {
+      "*.jsx": "javascriptreact"
+    },
+    "javascript.format.enable": false,
+    "prettier.requireConfig": true
+  }

@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Cesium Upload Test</title>
+  <style>
+    body { font-family: sans-serif; padding: 2rem; }
+    input[type="file"] { margin-bottom: 1rem; }
+    #log { white-space: pre-wrap; font-family: monospace; background: #eee; padding: 1rem; }
+  </style>
+</head>
+<body>
+  <h1>Upload .laz to Cesium Ion</h1>
+  <input type="file" id="fileInput" accept=".laz,.las" />
+  <br />
+  <input type="text" id="tokenInput" placeholder="Cesium ION Token" size="80" />
+  <br />
+  <button onclick="upload()">Upload</button>
+
+  <h3>Status:</h3>
+  <div id="log">Waiting...</div>
+
+  <script>
+    async function upload() {
+      const fileInput = document.getElementById('fileInput');
+      const token = document.getElementById('tokenInput').value;
+      const log = document.getElementById('log');
+      const file = fileInput.files[0];
+
+      if (!file || !token) {
+        log.textContent = '❌ Please select a file and paste your Cesium Ion token.';
+        return;
+      }
+
+      try {
+        log.textContent = '🚀 Creating asset in Cesium...';
+        const createAssetRes = await fetch('https://api.cesium.com/v1/assets', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            name: file.name,
+            type: '3DTILES',
+            options: { sourceType: 'POINT_CLOUD' }
+          })
+        });
+
+        const asset = await createAssetRes.json();
+
+        if (!asset.uploadLocation || !asset.onComplete) {
+          throw new Error('Invalid upload response from Cesium');
+        }
+
+        log.textContent += `\n✅ Created asset: ${asset.assetMetadata.id}`;
+
+        // Build form data for direct S3 upload
+        const formData = new FormData();
+        for (const [key, value] of Object.entries(asset.uploadLocation.fields || {})) {
+          formData.append(key, value);
+        }
+        formData.append('file', file);
+
+        log.textContent += '\n📡 Uploading file to Cesium S3...';
+
+        const s3Res = await fetch(asset.uploadLocation.url, {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!s3Res.ok) {
+          throw new Error('Failed to upload to S3');
+        }
+
+        log.textContent += '\n✅ File uploaded! Notifying Cesium...';
+
+        await fetch(asset.onComplete.url, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        log.textContent += `\n🎉 Done! View your asset: https://cesium.com/ion/assets/${asset.assetMetadata.id}`;
+      } catch (err) {
+        log.textContent += `\n❌ Error: ${err.message || err}`;
+      }
+    }
+  </script>
+</body>
+</html>

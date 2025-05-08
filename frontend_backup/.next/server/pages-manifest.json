@@ -1,0 +1,8 @@
+{
+  "/_app": "pages/_app.js",
+  "/_error": "pages/_error.js",
+  "/_document": "pages/_document.js",
+  "/viewer-list": "pages/viewer-list.js",
+  "/test-navbar": "pages/test-navbar.js",
+  "/viewer-standalone": "pages/viewer-standalone.js"
+}

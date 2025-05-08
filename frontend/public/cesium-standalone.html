@@ -1,0 +1,85 @@
+<!-- File: frontend/public/cesium-standalone.html -->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Cesium Standalone Viewer</title>
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.111/Build/Cesium/Cesium.js"></script>
+    <link
+      href="https://cesium.com/downloads/cesiumjs/releases/1.111/Build/Cesium/Widgets/widgets.css"
+      rel="stylesheet"
+    />
+    <style>
+      html,
+      body,
+      #cesiumContainer {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+      }
+      #loadingOverlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(255, 255, 255, 0.85);
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: sans-serif;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="cesiumContainer"></div>
+    <div id="loadingOverlay">
+      <h1>Loading Tileset...</h1>
+    </div>
+    <script>
+      // 🔐 Replace with your Ion access token if needed
+      Cesium.Ion.defaultAccessToken =
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI4MmZhOTkxNC05NDZjLTQxYWEtYTMzZC1kZDlmNzdmOTE4ZjUiLCJpZCI6Mjk3MDk4LCJpYXQiOjE3NDU1NTY2MDd9.AtqGQrYH5qty5SviyeNXrGA1KyULNEACq9lJzNfICzo";
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const assetId = urlParams.get("assetId");
+
+      if (!assetId) {
+        alert("Missing assetId in URL (e.g., ?assetId=123456)");
+        throw new Error("Missing assetId");
+      }
+
+      const viewer = new Cesium.Viewer("cesiumContainer", {
+        timeline: false,
+        animation: false,
+      });
+
+      async function loadTileset() {
+        try {
+          const tileset = await Cesium.Cesium3DTileset.fromIonAssetId(Number(assetId));
+          viewer.scene.primitives.add(tileset);
+          await viewer.zoomTo(tileset);
+
+          const extras = tileset.asset?.extras;
+          if (
+            Cesium.defined(extras) &&
+            Cesium.defined(extras.ion) &&
+            Cesium.defined(extras.ion.defaultStyle)
+          ) {
+            tileset.style = new Cesium.Cesium3DTileStyle(extras.ion.defaultStyle);
+          }
+
+          document.getElementById("loadingOverlay").style.display = "none";
+        } catch (error) {
+          console.error("❌ Failed to load tileset:", error);
+          document.getElementById("loadingOverlay").innerHTML = "<h1>Failed to load tileset</h1>";
+        }
+      }
+
+      loadTileset();
+    </script>
+  </body>
+</html>

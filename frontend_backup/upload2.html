@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cesium ion .LAZ Uploader</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #1a5279;
+            border-bottom: 2px solid #6EC1E4;
+            padding-bottom: 10px;
+        }
+        .container {
+            background-color: #f7f7f7;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        .upload-section {
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"], input[type="file"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #1a5279;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #13395a;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .progress-container {
+            margin-top: 20px;
+            display: none;
+        }
+        .progress-bar {
+            height: 20px;
+            background-color: #e0e0e0;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            overflow: hidden;
+        }
+        .progress {
+            height: 100%;
+            background-color: #6EC1E4;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        #status {
+            font-weight: bold;
+            margin-top: 10px;
+        }
+        #log {
+            background-color: #f0f0f0;
+            padding: 10px;
+            border-radius: 4px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 14px;
+            margin-top: 20px;
+            display: none;
+        }
+        .step {
+            margin-top: 30px;
+        }
+        .complete {
+            color: #28a745;
+        }
+        .error {
+            color: #dc3545;
+        }
+        .warning {
+            color: #ffc107;
+        }
+        .info {
+            color: #17a2b8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Cesium ion .LAZ Uploader</h1>
+        <div id="statusMessage" style="padding: 10px; margin-bottom: 15px; border-radius: 4px; display: none;"></div>
+        
+        <div class="upload-section">
+            <div class="form-group">
+                <label for="assetName">Asset Name:</label>
+                <input type="text" id="assetName" placeholder="Enter a name for your asset">
+            </div>
+            
+            <div class="form-group">
+                <label for="assetDescription">Description (optional):</label>
+                <input type="text" id="assetDescription" placeholder="Enter a description">
+            </div>
+            
+            <div class="form-group">
+                <label for="fileInput">Select .LAZ File:</label>
+                <input type="file" id="fileInput" accept=".laz,.las">
+            </div>
+            
+            <button id="uploadButton" disabled>Upload to Cesium ion</button>
+        </div>
+        
+        <div class="progress-container" id="progressContainer">
+            <div class="step">
+                <h3>Step 1: Creating Asset in Cesium ion</h3>
+                <div id="step1Status">Waiting to start...</div>
+            </div>
+            
+            <div class="step">
+                <h3>Step 2: Uploading File</h3>
+                <div class="progress-bar">
+                    <div class="progress" id="uploadProgress"></div>
+                </div>
+                <div id="step2Status">Waiting for asset creation...</div>
+            </div>
+            
+            <div class="step">
+                <h3>Step 3: Processing in Cesium ion</h3>
+                <div id="step3Status">Waiting for upload to complete...</div>
+            </div>
+            
+            <div id="finalResult"></div>
+        </div>
+        
+        <div id="log"></div>
+    </div>
+
+    <script>
+        // Configuration
+        const CESIUM_ION_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJmZWM4ZTQwYS04NWU1LTRlYzEtYWY4NS01YWRiZDRlNzM5MGYiLCJpZCI6Mjk3MDk4LCJpYXQiOjE3NDU4MDIwMDB9.vACu2A2C5rpuDZklEKvMUrOvEdLGYcM4jjSVjiigVpk';
+        
+        // Elements
+        const fileInput = document.getElementById('fileInput');
+        const assetNameInput = document.getElementById('assetName');
+        const assetDescriptionInput = document.getElementById('assetDescription');
+        const uploadButton = document.getElementById('uploadButton');
+        const progressContainer = document.getElementById('progressContainer');
+        const uploadProgress = document.getElementById('uploadProgress');
+        const step1Status = document.getElementById('step1Status');
+        const step2Status = document.getElementById('step2Status');
+        const step3Status = document.getElementById('step3Status');
+        const finalResult = document.getElementById('finalResult');
+        const logElement = document.getElementById('log');
+        const statusMessage = document.getElementById('statusMessage');
+        
+        // Enable/disable upload button based on file selection
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length > 0 && assetNameInput.value.trim() !== '') {
+                uploadButton.disabled = false;
+            } else {
+                uploadButton.disabled = true;
+            }
+        });
+        
+        assetNameInput.addEventListener('input', () => {
+            if (fileInput.files.length > 0 && assetNameInput.value.trim() !== '') {
+                uploadButton.disabled = false;
+            } else {
+                uploadButton.disabled = true;
+            }
+        });
+        
+        // Log function
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            logElement.style.display = 'block';
+            logElement.innerHTML += `<div class="${type}">[${timestamp}] ${message}</div>`;
+            logElement.scrollTop = logElement.scrollHeight;
+            
+            // Show important messages in the status area
+            if (type === 'error' || type === 'warning') {
+                statusMessage.style.display = 'block';
+                statusMessage.textContent = message;
+                statusMessage.className = type;
+                statusMessage.style.backgroundColor = type === 'error' ? '#f8d7da' : '#fff3cd';
+                statusMessage.style.color = type === 'error' ? '#721c24' : '#856404';
+                statusMessage.style.border = type === 'error' ? '1px solid #f5c6cb' : '1px solid #ffeeba';
+            }
+        }
+        
+        // Create asset in Cesium ion
+        async function createAsset(name, description) {
+            // Add random suffix to reduce chance of collisions if needed
+            // const randomSuffix = Math.floor(Math.random() * 10000);
+            // name = `${name}_${randomSuffix}`;
+            step1Status.textContent = 'Creating asset...';
+            log('Creating asset in Cesium ion...');
+            
+            try {
+                const response = await fetch('https://api.cesium.com/v1/assets', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${CESIUM_ION_TOKEN}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name: name,
+                        description: description || 'Uploaded via HTML uploader',
+                        type: 'POINT_CLOUD',
+                        options: {
+                            sourceType: 'LAS/LAZ'
+                        }
+                    })
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    let errorMessage = `HTTP error! status: ${response.status}`;
+                    
+                    try {
+                        const errorJson = JSON.parse(errorText);
+                        if (errorJson.message) {
+                            errorMessage = errorJson.message;
+                        }
+                    } catch (e) {
+                        // If parsing fails, use the original error text
+                        if (errorText) {
+                            errorMessage += ` - ${errorText}`;
+                        }
+                    }
+                    
+                    // Special handling for common errors
+                    if (response.status === 409) {
+                        errorMessage = "An asset with this name already exists. Please choose a different name.";
+                    } else if (response.status === 401) {
+                        errorMessage = "Authentication failed. Please check your Cesium ion token.";
+                    } else if (response.status === 403) {
+                        errorMessage = "You don't have permission to create assets. Please check your Cesium ion token permissions.";
+                    }
+                    
+                    throw new Error(errorMessage);
+                }
+                
+                const data = await response.json();
+                step1Status.textContent = 'Asset created successfully!';
+                step1Status.classList.add('complete');
+                log('Asset created successfully! Asset ID: ' + data.assetId, 'complete');
+                return data;
+            } catch (error) {
+                step1Status.textContent = `Error creating asset: ${error.message}`;
+                step1Status.classList.add('error');
+                log(`Error creating asset: ${error.message}`, 'error');
+                throw error;
+            }
+        }
+        
+        // Upload file to Cesium ion
+        async function uploadFile(file, uploadDetails) {
+            step2Status.textContent = 'Preparing upload...';
+            log('Preparing to upload file...');
+            
+            try {
+                const formData = new FormData();
+                
+                // Add form fields from Cesium ion response
+                Object.entries(uploadDetails.uploadFormFields).forEach(([key, value]) => {
+                    formData.append(key, value);
+                });
+                
+                // Add file
+                formData.append('file', file);
+                
+                // Create AJAX request
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', uploadDetails.uploadUrl, true);
+                
+                // Track upload progress
+                xhr.upload.addEventListener('progress', (event) => {
+                    if (event.lengthComputable) {
+                        const percentComplete = Math.round((event.loaded / event.total) * 100);
+                        uploadProgress.style.width = percentComplete + '%';
+                        step2Status.textContent = `Uploading... ${percentComplete}%`;
+                        log(`Upload progress: ${percentComplete}%`);
+                    }
+                });
+                
+                // Handle completion
+                return new Promise((resolve, reject) => {
+                    xhr.onload = function() {
+                        if (xhr.status >= 200 && xhr.status < 300) {
+                            step2Status.textContent = 'Upload completed successfully!';
+                            step2Status.classList.add('complete');
+                            log('File uploaded successfully!', 'complete');
+                            resolve();
+                        } else {
+                            step2Status.textContent = `Upload failed: ${xhr.status} ${xhr.statusText}`;
+                            step2Status.classList.add('error');
+                            log(`Upload failed: ${xhr.status} ${xhr.statusText}`, 'error');
+                            reject(new Error(`Upload failed: ${xhr.status} ${xhr.statusText}`));
+                        }
+                    };
+                    
+                    xhr.onerror = function() {
+                        step2Status.textContent = 'Network error occurred during upload';
+                        step2Status.classList.add('error');
+                        log('Network error occurred during upload', 'error');
+                        reject(new Error('Network error occurred during upload'));
+                    };
+                    
+                    // Start upload
+                    xhr.send(formData);
+                });
+            } catch (error) {
+                step2Status.textContent = `Error during upload: ${error.message}`;
+                step2Status.classList.add('error');
+                log(`Error during upload: ${error.message}`, 'error');
+                throw error;
+            }
+        }
+        
+        // Start processing
+        async function startProcessing(assetId) {
+            step3Status.textContent = 'Starting processing...';
+            log('Starting processing in Cesium ion...');
+            
+            try {
+                const response = await fetch(`https://api.cesium.com/v1/assets/${assetId}/start`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${CESIUM_ION_TOKEN}`
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                step3Status.textContent = 'Processing started successfully!';
+                step3Status.classList.add('complete');
+                log('Processing started successfully!', 'complete');
+                return true;
+            } catch (error) {
+                step3Status.textContent = `Error starting processing: ${error.message}`;
+                step3Status.classList.add('error');
+                log(`Error starting processing: ${error.message}`, 'error');
+                throw error;
+            }
+        }
+        
+        // Check processing status
+        async function checkStatus(assetId) {
+            try {
+                const response = await fetch(`https://api.cesium.com/v1/assets/${assetId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${CESIUM_ION_TOKEN}`
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                log(`Current status: ${data.status}`, 'info');
+                return data;
+            } catch (error) {
+                log(`Error checking status: ${error.message}`, 'warning');
+                return null;
+            }
+        }
+        
+        // Main upload process
+        async function handleUpload() {
+            const file = fileInput.files[0];
+            // Add timestamp to asset name to avoid conflicts
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+            const assetName = `${assetNameInput.value}_${timestamp}`;
+            const assetDescription = assetDescriptionInput.value;
+            
+            if (!file || !assetName) {
+                alert('Please select a file and provide an asset name');
+                return;
+            }
+            
+            // Check file extension
+            const fileExtension = file.name.split('.').pop().toLowerCase();
+            if (fileExtension !== 'laz' && fileExtension !== 'las') {
+                alert('Please select a .laz or .las file');
+                return;
+            }
+            
+            // Disable the upload button and show progress
+            uploadButton.disabled = true;
+            progressContainer.style.display = 'block';
+            logElement.style.display = 'block';
+            
+            try {
+                // Reset status message
+                statusMessage.style.display = 'none';
+                
+                // Step 1: Create asset
+                const assetDetails = await createAsset(assetName, assetDescription);
+                const assetId = assetDetails.assetId;
+                
+                // Step 2: Upload file
+                await uploadFile(file, assetDetails);
+                
+                // Step 3: Start processing
+                await startProcessing(assetId);
+                
+                // Final result
+                finalResult.innerHTML = `
+                    <h3>Success! Your .LAZ file is being processed</h3>
+                    <p>You can view your asset in Cesium ion at:<br>
+                    <a href="https://cesium.com/ion/assets/${assetId}" target="_blank">https://cesium.com/ion/assets/${assetId}</a></p>
+                    <p>Asset ID: ${assetId}</p>
+                `;
+                
+                // Start status checking
+                checkStatusPeriodically(assetId);
+                
+            } catch (error) {
+                finalResult.innerHTML = `
+                    <h3 class="error">Upload Process Failed</h3>
+                    <p class="error">${error.message}</p>
+                    <p>Please try again or check your Cesium ion token.</p>
+                `;
+                uploadButton.disabled = false;
+                
+                // Show clear error message at the top
+                statusMessage.style.display = 'block';
+                statusMessage.textContent = error.message;
+                statusMessage.className = 'error';
+                statusMessage.style.backgroundColor = '#f8d7da';
+                statusMessage.style.color = '#721c24';
+                statusMessage.style.border = '1px solid #f5c6cb';
+            }
+        }
+        
+        // Check status periodically
+        function checkStatusPeriodically(assetId) {
+            const interval = setInterval(async () => {
+                const status = await checkStatus(assetId);
+                if (status && (status.status === 'COMPLETE' || status.status === 'ERROR')) {
+                    clearInterval(interval);
+                    if (status.status === 'COMPLETE') {
+                        log('Processing completed successfully!', 'complete');
+                        finalResult.innerHTML += `
+                            <p class="complete">Processing completed! Your 3D tileset is ready to use.</p>
+                        `;
+                    } else {
+                        log('Processing failed: ' + (status.errorMessage || 'Unknown error'), 'error');
+                        finalResult.innerHTML += `
+                            <p class="error">Processing failed: ${status.errorMessage || 'Unknown error'}</p>
+                        `;
+                    }
+                }
+            }, 5000); // Check every 5 seconds
+        }
+        
+        // Set up upload button
+        uploadButton.addEventListener('click', handleUpload);
+    </script>
+</body>
+</html>
